@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Panel de Administración - Mundo Frappe">
+    <title>Panel de Administración - Mundo Frappe</title>
+    <link rel="stylesheet" href="admin.css">
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        import { getStorage } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyBtJDVXDQlywzU4h0ARunvauLYMCK9d2Uo",
+            authDomain: "mundo-frappe-bosques.firebaseapp.com",
+            databaseURL: "https://mundo-frappe-bosques-default-rtdb.firebaseio.com",
+            projectId: "mundo-frappe-bosques",
+            storageBucket: "mundo-frappe-bosques.firebasestorage.app",
+            messagingSenderId: "318086759976",
+            appId: "1:318086759976:web:4207653b6af8deb262571d",
+            measurementId: "G-2M6CJXZM00"
+        };
+        
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.database = getDatabase(app);
+            // Storage es opcional - no lo usamos porque cobra. Las imágenes se guardan como base64.
+            try {
+                window.storage = getStorage(app);
+            } catch (storageError) {
+                console.warn('Firebase Storage no disponible (esto es normal si no lo necesitas):', storageError);
+            }
+            window.firebaseReady = true;
+            console.log('Firebase inicializado en el head');
+        } catch (error) {
+            console.error('Error al inicializar Firebase:', error);
+            window.firebaseError = error;
+        }
+    </script>
+</head>
+<body>
+    <div class="admin-wrapper">
+        <!-- Header -->
+        <header class="admin-header">
+            <div class="header-content">
+                <div class="header-top">
+                    <h1>Panel de Administración</h1>
+                </div>
+                <p>Gestiona categorías, productos y precios</p>
+                <a href="/" class="back-link">← Volver al Menú</a>
+            </div>
+        </header>
+
+        <!-- Tabs Navigation -->
+        <nav class="admin-tabs">
+            <button class="tab-btn active" data-tab="productos">
+                <span class="tab-icon">📦</span>
+                Productos
+            </button>
+            <button class="tab-btn" data-tab="categorias">
+                <span class="tab-icon">📁</span>
+                Categorías
+            </button>
+            <button class="tab-btn" data-tab="secciones">
+                <span class="tab-icon">📋</span>
+                Secciones
+            </button>
+            <button class="tab-btn" data-tab="temporada">
+                <span class="tab-icon">🍂</span>
+                Temporada del Menú
+            </button>
+        </nav>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Cargando...</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="admin-main">
+            <!-- Productos Section -->
+            <section id="productosSection" class="admin-section active">
+                <div class="section-grid">
+                    <!-- Form Container -->
+                    <div class="form-container">
+                        <div class="form-card">
+                            <h2 id="productoFormTitle">Nuevo Producto</h2>
+                            <form id="productoForm" class="admin-form">
+                                <div class="form-group">
+                                    <label for="productoNombre">Nombre *</label>
+                                    <input type="text" id="productoNombre" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="productoDescripcion">Descripción</label>
+                                    <textarea id="productoDescripcion" rows="3"></textarea>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="productoCategoria">Categoría *</label>
+                                        <select id="productoCategoria" required>
+                                            <option value="">Seleccionar categoría</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="productoPrecioChico">Precio Chico</label>
+                                        <input type="number" id="productoPrecioChico" step="0.01" min="0" placeholder="Ej: 50">
+                                        <small class="form-help-text">Opcional</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="productoPrecioGrande">Precio Grande</label>
+                                        <input type="number" id="productoPrecioGrande" step="0.01" min="0" placeholder="Ej: 70">
+                                        <small class="form-help-text">Opcional</small>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <small class="form-help-text">* Debes ingresar al menos un precio (chico o grande)</small>
+                                </div>
+                                <div class="form-group checkbox-group">
+                                    <label>
+                                        <input type="checkbox" id="aplicarPrecioCategoria">
+                                        <span>Aplicar este precio a todos los productos de esta categoría</span>
+                                    </label>
+                                    <small class="form-help-text">Al marcar esta opción, todos los productos de la categoría seleccionada tendrán el mismo precio.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="productoImagenUrl">Imagen (URL)</label>
+                                    <input type="url" id="productoImagenUrl" placeholder="https://ejemplo.com/imagen.jpg">
+                                </div>
+                                <div class="form-group">
+                                    <label for="productoImagenFile">O subir archivo</label>
+                                    <input type="file" id="productoImagenFile" accept="image/*">
+                                    <div id="productoUploadStatus" class="upload-status hidden"></div>
+                                </div>
+                                <div id="productoImagePreview" class="image-preview hidden">
+                                    <img id="productoPreviewImg" src="" alt="Preview">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary" id="productoSubmitBtn">
+                                        Agregar Producto
+                                    </button>
+                                    <button type="button" class="btn btn-secondary hidden" id="productoCancelBtn">
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- List Container -->
+                    <div class="list-container">
+                        <div class="list-card">
+                            <h2>Productos Existentes</h2>
+                            <div id="productosList" class="products-categories-container">
+                                <div class="empty-state">
+                                    <p>Cargando productos...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Categorías Section -->
+            <section id="categoriasSection" class="admin-section">
+                <div class="section-grid">
+                    <!-- Form Container -->
+                    <div class="form-container">
+                        <div class="form-card">
+                            <h2 id="categoriaFormTitle">Nueva Categoría</h2>
+                            <form id="categoriaForm" class="admin-form">
+                                <div class="form-group">
+                                    <label for="categoriaNombre">Nombre *</label>
+                                    <input type="text" id="categoriaNombre" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="categoriaDescripcion">Descripción</label>
+                                    <textarea id="categoriaDescripcion" rows="3"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="categoriaSeccion">Sección</label>
+                                    <select id="categoriaSeccion">
+                                        <option value="">Sin sección</option>
+                                    </select>
+                                    <small class="form-help-text">Agrupa categorías por secciones (ej: Bebidas, Repostería, Comida)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="categoriaImagenUrl">Imagen (URL)</label>
+                                    <input type="url" id="categoriaImagenUrl" placeholder="https://ejemplo.com/imagen.jpg">
+                                </div>
+                                <div class="form-group">
+                                    <label for="categoriaImagenFile">O subir archivo</label>
+                                    <input type="file" id="categoriaImagenFile" accept="image/*">
+                                    <div id="categoriaUploadStatus" class="upload-status hidden"></div>
+                                </div>
+                                <div id="categoriaImagePreview" class="image-preview hidden">
+                                    <img id="categoriaPreviewImg" src="" alt="Preview">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary" id="categoriaSubmitBtn">
+                                        Agregar Categoría
+                                    </button>
+                                    <button type="button" class="btn btn-secondary hidden" id="categoriaCancelBtn">
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- List Container -->
+                    <div class="list-container">
+                        <div class="list-card">
+                            <h2>Categorías Existentes</h2>
+                            <div id="categoriasList" class="items-grid">
+                                <div class="empty-state">
+                                    <p>Cargando categorías...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Secciones Section -->
+            <section id="seccionesSection" class="admin-section">
+                <div class="section-grid">
+                    <!-- Form Container -->
+                    <div class="form-container">
+                        <div class="form-card">
+                            <h2 id="seccionFormTitle">Nueva Sección</h2>
+                            <form id="seccionForm" class="admin-form">
+                                <div class="form-group">
+                                    <label for="seccionNombre">Nombre *</label>
+                                    <input type="text" id="seccionNombre" required placeholder="Ej: Bebidas, Repostería, Comida">
+                                </div>
+                                <div class="form-group">
+                                    <label for="seccionOrden">Orden</label>
+                                    <input type="number" id="seccionOrden" min="0" value="0" placeholder="Orden de visualización">
+                                    <small class="form-help-text">Las secciones se ordenarán por este número (menor = primero)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Categorías en esta sección *</label>
+                                    <div id="seccionCategoriasContainer" class="categorias-checkboxes">
+                                        <div class="empty-state">
+                                            <p>Cargando categorías...</p>
+                                        </div>
+                                    </div>
+                                    <small class="form-help-text">Selecciona las categorías que pertenecen a esta sección</small>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary" id="seccionSubmitBtn">
+                                        Agregar Sección
+                                    </button>
+                                    <button type="button" class="btn btn-secondary hidden" id="seccionCancelBtn">
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- List Container -->
+                    <div class="list-container">
+                        <div class="list-card">
+                            <h2>Secciones Existentes</h2>
+                            <div id="seccionesList" class="items-grid">
+                                <div class="empty-state">
+                                    <p>Cargando secciones...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Temporada Section -->
+            <section id="temporadaSection" class="admin-section">
+                <div class="section-grid">
+                    <div class="form-container">
+                        <div class="form-card">
+                            <h2>Configuración de Temporada del Menú</h2>
+                            <p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 2rem;">
+                                Selecciona una temporada para aplicar efectos especiales en el menú.
+                            </p>
+                            
+                            <div id="temporadasGrid" class="temporadas-grid">
+                                <!-- Las tarjetas de temporada se generarán dinámicamente -->
+                            </div>
+
+                            <div style="margin-top: 2rem;">
+                                <button type="button" class="btn btn-secondary" id="resetTemporadaBtn">
+                                    Quitar Temporada
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="admin.js"></script>
+</body>
+</html>
+
